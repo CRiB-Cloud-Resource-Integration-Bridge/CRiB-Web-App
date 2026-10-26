@@ -1,5 +1,5 @@
 ---
-modified: 2026-10-20 19:49 PM
+modified: 2026-10-26 20:59 PM
 tags:
   - opit
 linked_notes:
@@ -8,93 +8,138 @@ linked_notes:
 ---
 # CRiB Prototype Lifecycle and Architecture Decisions
 
-## 1. Accepted prototype baseline
+## 1. Prototype baseline
 
-For **Assessment 1**, CRiB adopts the existing **Flask/Python, SQLite, server-rendered UI, and mock-provider** design as its accepted prototype baseline. It is deliberately narrow and proves the most important early assumption: CRiB can present a user-scoped, provider-shaped resource browser through a clean adapter boundary.
+The Assessment 1 prototype is a clickable **Penpot** prototype. Its purpose is to give the team and the reviewer a working, shareable visual representation of CRiB's features and form before application enters actual code development stages.
 
-This acceptance applies to the prototype/backbone. It does not by itself commit Assessment 2 to a final deployed stack. The team will use the feasibility spike in Section 5B to decide whether to continue and evolve this baseline, or use one alternative backend/API path.
+The prototype mirrors [[01-requirements-foundation]]:
 
-**Architecture rule:** CRiB shall use one backend/API runtime. Flask, Spring Boot, and Node.js must not be combined as three backend layers. React/TypeScript is a frontend option that can pair with either Node.js or Spring Boot; it may also be deferred while the prototype baseline is validated.
+- **Journey:** it follows the primary journey: landing page, register or sign in, connect Google Drive, browse, search and filter, view resource details, download, disconnect, and sign out.
+- **Screens and states:** it covers the prototype screens listed in the requirements, including empty, loading, no-results, expired-connection, and error states.
+- **Requirements:** every requirement whose phase includes "Prototype" is represented by at least one screen or interaction. Screens can carry requirement IDs as Penpot comments.
+- **Scope:** it shows only what is inside the MVP boundary: download only, no in-app content preview, no transfers.
 
-## 2. What the supplied architecture accomplished so far
+The prototype does not depend on any technology choice. It uses sample data and a simulated Google Drive connection.
 
-The diagram shows these useful boundaries:
+![[CRiB-Assessment-1-user-journey-Excalidraw-export.png]]
 
-- A browser-facing web application with routes/views, authentication/session handling, core services, static assets, and database access.
-- A **provider layer** that isolates the rest of the application from provider-specific APIs.
-- A low-risk **mock provider** and seeded file data for the backbone stage.
-- A later Google OAuth/Google Drive API path rather than asking for a user's provider password.
-- A clear user path: login -> dashboard -> provider selection -> file browser -> folder navigation.
+**Deliverables:** a shareable Penpot link (view permissions checked in a private browser window) and a PDF export with documentation and architecture diagrams.
 
-The requirements baseline extends the shown flow with explicit empty, loading, authorization-failure, expired-connection, search/filter, download/access, and disconnect states. These are essential prototype screens, not necessarily extra features.
+## 2. Architecture scope
 
-### Requirements-to-architecture traceability
+The architecture describes CRiB's logical backbone: the parts the application needs and how they relate, independent of the languages and frameworks chosen later (Sections 3 and 4). The implementation is scaffolded from this backbone once the team selects a stack.
 
-The architecture must remain aligned with [[01-requirements-foundation]]. This table provides the fixed mapping for the accepted prototype baseline; it should be updated only when an approved requirement or architecture decision changes.
+![[CRiB-Assessment-1-Excalidraw-export.png]]
+### 2.1 Logical components
 
-| Requirements | Architecture element | Prototype evidence | Status |
-| --- | --- | --- | --- |
-| FR-01, FR-04, FR-07 to FR-10, FR-14; NFR-06 to NFR-08 | Browser UI, routes/views, templates, static assets | Figma flow covering landing, dashboard, resource browser, responsive and error states | Planned |
-| FR-02, FR-03; NFR-01, NFR-02, NFR-04 | Authentication/session layer and protected routes | Sign-in/sign-out screens; unauthorized-route and safe-error states | Planned |
-| FR-05, FR-06, FR-12, FR-13; NFR-03, NFR-11 | Provider layer, provider connection data, OAuth/authorization boundary | Provider-selection, connection status, reauthorization, and disconnect states | Planned |
-| FR-07 to FR-11; NFR-09, NFR-10 | Core services and provider adapter | Mock resource list, folder navigation, search/filter, access/download and provider-failure states | Planned |
-| FR-06, FR-13; NFR-05 | SQLite database access and data model | User-scoped mock connections and documented retained metadata | Planned |
-| NFR-12, NFR-13 | Repository, automated checks, hosting decision | README/setup record, decision record, and hosting-cost evidence | Planned |
+| Component                  | Responsibility                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Browser client             | Screens, navigation, forms, and states. Talks only to the backend API.                                                                      |
+| Backend API                | Single entry point for all data and actions. Enforces authentication and user-scoped authorization.                                         |
+| Authentication and sessions | Register, sign in and out, password hashing, sessions, and protected routes.                                                               |
+| Core services              | Application rules: resource listing, search and filter, download eligibility, and connection management.                                    |
+| Provider adapter           | One common contract for provider operations. A mock provider serves development and tests; a Google Drive adapter serves the demo.          |
+| Database                   | One relational database for users, provider connections (with protected tokens), and an optional metadata cache.                          |
+| External provider          | Google OAuth for authorization and the Google Drive API for resource data. CRiB never handles the provider password.                        |
 
-## 3. Stack options compared
+```text
+Browser client
+      │  HTTPS
+      ▼
+Backend API ── Authentication and sessions
+      │
+      ▼
+Core services ────────────── Database
+      │
+      ▼
+Provider adapter
+   ├── Mock provider (development, tests)
+   └── Google Drive adapter ──► Google OAuth / Drive API
+```
 
-| Option                                                           | Strengths for CRiB                                                                                                                                            | Costs and risks                                                                                                                                                           | Best use                                                                                                                           |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Flask/Python + SQLite + server-rendered HTML + mock provider** | Smallest working surface; directly matches the supplied diagram; ideal for validating user flow, provider adapter, and seeded test data.                      | Less natural if the team wants a richer single-page UI; SQLite is not the preferred shared production database; moving later can create rework.                           | Early backbone and a credible fallback demo if time/skills are tight.                                                              |
-| **React/TypeScript + Node.js API + PostgreSQL**                  | One language across client and server; strong component ecosystem; React supports a Figma-to-component workflow; PostgreSQL suits shared deployed data.       | Requires separate frontend/API delivery, auth/session design, provider OAuth integration, and environment management; do not underestimate JavaScript/TypeScript tooling. | Good candidate if the team is most comfortable with TypeScript and can establish a clean API boundary early.                       |
-| **React/TypeScript + Java/Spring Boot + PostgreSQL**             | Clear enterprise-style API structure; mature security/data ecosystem; React remains a strong UI choice; PostgreSQL is suitable for a deployed multi-user app. | ==Highest initial setup/learning overhead for a beginner team; using Spring Security, OAuth, and React simultaneously can absorb the schedule.==                          | Good candidate if the team already has credible Java/Spring ownership and uses the prototype phase to prove the risky integration. |
-| **Flask/Python + PostgreSQL, with React optional**               | Preserves the team's existing architecture and Python progress while replacing SQLite only when a shared hosted database is needed.                           | ==Still needs a deliberate frontend choice and deployment/security work; avoids the false comfort of a fully different "production" plan.==                               | Pragmatic transition if Flask is already moving and the team wants to reduce stack churn.                                          |
+### 2.2 Expected outcomes
 
-## 4. Architecture decisions and option evaluation
+- One shared, editable architecture diagram showing these components, the mock provider, and Google Drive. The editable source lives in the repository, with a PNG or PDF export for the submission.
+- Each component maps to requirements (Section 2.3), so the team can check that nothing is missing.
+- The backbone stays the same whichever stack option is chosen; only the technologies that fill each component change.
 
-### 4.1 Architecture invariants
+### 2.3 Requirements-to-architecture traceability
 
-These choices should be approved as a team before implementation proceeds. “Approved” means the decision is accepted for the Assessment 1 prototype and will not change without a recorded team decision.
+This table maps the requirements in [[01-requirements-foundation]] to the logical components. Update it only when an approved requirement or architecture decision changes.
 
-| Decision | Proposed position | Status | Owner | Evidence / decision record |
-| --- | --- | --- | --- | --- |
-| Client boundary | Browser-based web client | Pending team approval |  |  |
-| Backend boundary | One backend/API runtime only | Pending team approval |  |  |
-| Data boundary | One relational database; SQLite for the accepted prototype baseline | Pending team approval |  |  |
-| Provider abstraction | Provider adapter isolates provider-specific behaviour | Pending team approval |  |  |
-| Provider authorization | OAuth or provider-supported authorization; never collect provider passwords | Pending team approval |  |  |
-| User authorization | Every protected operation is user-scoped | Pending team approval |  |  |
-| Storage boundary | No file synchronization, CRiB bulk storage, or local-device transfer in the MVP | Pending team approval |  |  |
-| Repository strategy | One monorepo containing application code, tests, documentation, automation, and deployment assets | Accepted |  |  |
-| Prototype baseline | Flask/Python, SQLite, server-rendered UI, mock provider | Accepted for Assessment 1 |  |  |
+| Requirements                                                 | Architecture element                                  | Prototype evidence                                                                                  | Status  |
+| ------------------------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------- |
+| FR-01, FR-04, FR-07 to FR-10, FR-14, FR-15; NFR-06 to NFR-08 | Browser client                                        | Penpot flow covering landing, dashboard, resource browser, search and filter, responsive and error states | Planned |
+| FR-02, FR-03; NFR-01, NFR-02, NFR-04                         | Authentication and sessions, protected routes         | Register, sign-in, and sign-out screens; unauthorized-route and safe-error states                   | Planned |
+| FR-05, FR-06, FR-12, FR-13; NFR-03, NFR-11                   | Provider adapter, Google OAuth boundary               | Provider selection, connection status, reauthorization, and disconnect states                       | Planned |
+| FR-07 to FR-11; NFR-09, NFR-10                               | Core services and provider adapter                    | Sample resource list, folder navigation, search and filter, download, and provider-failure states   | Planned |
+| FR-06, FR-13; NFR-02, NFR-05                                 | Database (data model proposal in requirements §8.1)   | User-scoped connections and documented stored fields                                                | Planned |
+| NFR-12, NFR-13                                               | Repository, automated checks, hosting decision        | README and setup record, decision log, and hosting-cost evidence                                    | Planned |
 
-### 4.2 Assessment 2 stack decision gate
+## 3. Tech stack options
 
-The team shall run one time-boxed feasibility spike before committing the working-demo stack. Each candidate must demonstrate the same minimum test: a provider authorization callback, secure association with the user, one resource-list request, and an expired-connection or provider-error state.
+Two options are shortlisted for the working demo. Both use a **React + TypeScript** browser client and a **PostgreSQL** database; they differ in the backend runtime.
 
-After the spike, the team must select exactly one demo path:
+### 3.1 Option A: React/TypeScript + Node.js API + PostgreSQL
 
-- Continue the Flask baseline, moving from SQLite to PostgreSQL only if deployment or shared-data needs justify it; or
-- Use React/TypeScript with **one** API backend: Node.js **or** Spring Boot, plus PostgreSQL.
+**Strengths:** one language (TypeScript) across the browser client and the backend, so API request and response types can be shared. Lightweight setup, a large ecosystem, and an official Google API client library for Node.js. React fits a component workflow that follows the Penpot prototype, and PostgreSQL suits a deployed multi-user application.
 
-Prefer the option the team can explain, test, and deploy by 1 December. A coherent, small integration is preferable to a partially assembled multi-framework solution.
+**Costs and risks:** the frontend and API are delivered separately, so authentication, sessions, provider OAuth, and environment settings all need deliberate design. JavaScript/TypeScript tooling (build configuration, asynchronous code) can be confusing for beginners. Node.js has fewer built-in conventions, so the team must agree on structure and choose security libraries carefully.
 
-### 4.3 Candidate evaluation record
+**Best fit:** the team is most comfortable with JavaScript/TypeScript and wants the shortest path to a working demo.
 
-Score each candidate 1-5 after the spike, with evidence rather than preference. A score without linked evidence is incomplete.
+### 3.2 Option B: React/TypeScript + Java/Spring Boot + PostgreSQL
 
-| Candidate                                   | Provider integration | Ownership | Security fit | Deployment fit | Evidence / decision link | Decision |
-| ------------------------------------------- | -------------------- | --------- | ------------ | -------------- | ------------------------ | -------- |
-| Flask/Python + PostgreSQL                   |                      |           |              |                |                          |          |
-| React/TypeScript + Node.js + PostgreSQL     |                      |           |              |                |                          |          |
-| React/TypeScript + Spring Boot + PostgreSQL |                      |           |              |                |                          |          |
+**Strengths:** a clear, conventional backend structure (controllers, services, repositories); mature security and OAuth support (Spring Security) and database access (Spring Data); strong typing; and an official Google API client library for Java. React remains a strong UI choice and PostgreSQL suits a deployed multi-user application.
+
+**Costs and risks:** the highest initial setup and learning overhead for a beginner team. Learning Spring Security, OAuth, and React at the same time can absorb the schedule. The team works in two languages (Java and TypeScript).
+
+**Best fit:** at least one team member has credible Java/Spring experience and can own the backend.
+
+## 4. Architecture decisions and stack evaluation
+
+### 4.1 Architecture baseline
+
+These choices should be approved as a team before implementation starts. "Approved" means the decision is part of the baseline and changes only through a recorded team decision.
+
+| Decision               | Proposed position                                                                                                  | Status                    | Owner                | Evidence / decision record |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------- | -------------------- | -------------------------- |
+| Client boundary        | Browser-based web client                                                                                           | Approved                  | Team                 | Team communication channel |
+| Frontend framework     | React + TypeScript (common to both stack options)                                                                  | Pending team approval     | Frontend             |                            |
+| Backend boundary       | One backend/API runtime only: Node.js or Spring Boot, never both                                                   | Pending team approval     | Nikola               |                            |
+| Data boundary          | One relational database: PostgreSQL                                                                                | Pending team approval     | Nikola, Daniil, Alin |                            |
+| Provider abstraction   | Provider adapter isolates provider-specific behaviour                                                              | Pending team approval     | Nikola               |                            |
+| Provider authorization | OAuth or provider-supported authorization; never collect provider passwords                                        | Pending team approval     | Nikola               |                            |
+| User authorization     | Every protected operation is user-scoped                                                                           | Pending team approval     | Nikola, Alin         |                            |
+| Storage boundary       | Download only: no file synchronization, CRiB bulk storage, in-app content preview, or local-device transfer in the MVP | Pending team approval  | Nikola               |                            |
+| Repository strategy    | One monorepo containing application code, tests, documentation, automation, and deployment assets                  | Pending team approval     | Nikola, Alin, Daniil |                            |
+| Prototype              | Clickable Penpot prototype                                                                                         | Accepted for Assessment 1 | Daniil, Anika        | Team communication channel |
+
+### 4.2 Stack evaluation
+
+The two options in Section 3 are evaluated against the team's skills, the deadline, and the MVP scope (Google Drive authorization, resource listing, and download). The evaluation is deliberately informal:
+
+1. **Skills check and Spike:** a skillset team discussion and a short, time-boxed test (2–3 days) in the leading option, or in both if at least two people are available. It should prove a Google sign-in callback, storing the connection for the signed-in user, one resource-list request, and an expired-connection or error state.
+2. **Decision:** the team discusses the results, chooses one option.
+
+Prefer the option the team can explain, test, and deploy as soon as possible. A small, coherent integration beats a partially assembled multi-framework solution.
+
+**Rough lifecycle estimate** (for planning, not a commitment), about five weeks from 28 October to 1 December:
+
+| Week | Dates                       | Focus                                                                  |
+| ---- | --------------------------- | ---------------------------------------------------------------------- |
+| 1    | Post Assessment 1           | Skills check, spike, stack decision, repository skeleton               |
+| 2    | Post Assessment 1 + 1 weeks | Authentication, user-scoped access, database                           |
+| 3    | Post Assessment 1 + 2 weeks | Provider adapter (mock, then Google Drive), dashboard, resource list   |
+| 4    | Post Assessment 1 + 2 weeks | Folder navigation, search and filter, download, error states           |
+| 5    | Post Assessment 1 + 3 weeks | Testing, accessibility and responsive pass, deployment, demo rehearsal |
 
 ## 5. Prototype-to-demo lifecycle
 
 ```text
 Requirements baseline
         ↓
-Figma user-flow prototype + Excalidraw architecture
+Penpot user-flow prototype + Excalidraw architecture
         ↓
 Provider/stack feasibility spike
         ↓
@@ -111,23 +156,22 @@ Public deployment and demo rehearsal
 
 **Outcome:** a traceable, reviewable design package, not an unfinished build.
 
-- [ ] Confirm the MVP boundary in `01-requirements-foundation.md`.
-- [ ] Complete the primary Figma flow and all key exceptional states listed in the requirements.
-- [ ] Decide and record one shared, editable architecture-diagram tool. Excalidraw is recommended, but the team may select any free, low-friction alternative.
-- [ ] Produce the shared architecture diagram. It must label: browser, backend/API, provider adapter, database, mock provider, and future real provider.
+- [x] Confirm the MVP boundary in `01-requirements-foundation.md`.
+- [ ] Complete the primary Penpot flow and all key exceptional states listed in the requirements.
+- [x] Decide and record one shared, editable architecture-diagram tool. Excalidraw is recommended, but the team may select any free, low-friction alternative.
+- [ ] Produce the shared architecture diagram. It must label: browser client, backend API, authentication, provider adapter, database, mock provider, and Google Drive.
 - [ ] Store the editable diagram source and export a stable PNG or PDF snapshot for the submission package.
-- [ ] Update the Markdown documentation and/or export a PDF with screen annotations and publish the Figma URL with tested permissions.
+- [ ] Update the Markdown documentation and/or export a PDF with screen annotations and publish the Penpot URL with tested permissions.
 - [ ] Recommended if the team is ready to use GitHub Issues: create issues using requirement IDs and give each team member a visible ownership area.
 
 ### B. Risk retirement and architecture decision - immediately after the prototype milestone
 
 **Outcome:** one evidence-backed implementation choice.
 
-- [ ] Choose one provider and create test/developer credentials without using personal production content.
+- [ ] Create Google Drive test/developer credentials and test accounts without using personal content (provider chosen: Google Drive).
 - [ ] Run the time-boxed OAuth/resource-list spike.
-- [ ] Evaluate the backend/database candidates with the decision criteria above.
-- [ ] Record the selected path, rejected alternatives, evidence, owner, date, and consequences in `ADR-002-demo-stack.md`.
-- [ ] Update the architecture diagram to reflect the selected demo path.
+- [ ] Evaluate the two stack options as described in Section 4.2.
+- [ ] Update the architecture diagram to reflect the selected stack.
 - [ ] Define the shared resource contract and provider adapter interface before building screen-specific code.
 
 ### C. Core demo build - toward 1 December
@@ -136,81 +180,63 @@ Public deployment and demo rehearsal
 
 1. Repository foundations: README, local setup steps, environment-variable template, branch/PR workflow, and test-data policy.
 2. Authentication and user-scoped authorization.
-3. Provider adapter plus mock data; then the selected real provider.
+3. Provider adapter plus mock data; then Google Drive.
 4. Dashboard, resource list, folders, search/filter, and provider states.
-5. Controlled download/access where permitted.
+5. Controlled download where the provider permits it.
 6. Error, security, responsive, accessibility, and usability passes.
 7. Public deployment, demonstration data, final test evidence, and team rehearsal.
 
-**Definition of demo-ready:** a fresh user can sign in, connect or use the documented test provider, browse resources, search/filter, access an eligible resource, encounter an understandable error state, and complete the journey in the publicly available deployment. The team can map each behaviour to a requirement ID and explain limitations honestly.
+**Definition of demo-ready:** a fresh user can sign in, connect Google Drive or use the documented test provider, browse resources, search/filter, download an eligible resource, encounter an understandable error state, and complete the journey in the publicly available deployment. The team can map each behaviour to a requirement ID and explain limitations honestly.
 
 ## 6. Proposed monorepo structure
 
-This is a proposed starting structure for the accepted Flask prototype baseline. It makes the browser/API boundary, application services, provider adapter, database access, tests, and project evidence visible without forcing the team to create empty folders before they are needed.
+This is a proposed, stack-neutral starting structure that works for either option in Section 3. Create folders only when they are needed.
 
 ```dirtree
 - /CRiB-Web-App
-	- /app                           # Browser routes, templates, and static assets
-		- /routes
-			- auth.*
-			- dashboard.*
-			- /tests
-			- /ui
-		- /services                  # Application use cases and business rules
-			- resource_service.*
-			- connection_service.*
-	- /api                           # JSON endpoints when a browser/client needs them
-		- resources.*
-		- provider_connections.*
-	- /providers                     # Provider-adapter boundary
-		-  base.*                    # Common ProviderAdapter contract
-		-  mock_provider.*           # Assessment 1 seeded/test-data adapter
-		-  google_drive.*            # Add only if Google Drive is selected
-	- /repositories                  # Database access only
-		- users.*
-		- provider_connections.*
-	- /models                        # User, connection, and normalized resource models
-	- config.*                       # Environment-based configuration; no secrets
+	- /frontend                      # React + TypeScript browser client
+		- /src
+			- /pages                 # Landing, auth, dashboard, resource browser
+			- /components            # Reusable UI parts based on the Penpot prototype
+			- /services              # Calls to the backend API
+		- /tests
+	- /backend                       # Node.js or Spring Boot API (one only)
+		- /src
+			- /routes                # HTTP endpoints (controllers in Spring Boot)
+			- /auth                  # Sign-in, sessions, protected-route checks
+			- /services              # Application rules and use cases
+			- /providers             # Provider-adapter boundary
+				- base.*             # Common ProviderAdapter contract
+				- mock_provider.*    # Sample data for development and tests
+				- google_drive.*     # Google Drive adapter
+			- /repositories          # Database access only
+			- /models                # User, connection, and resource models
+			- config.*               # Environment-based settings; no secrets
+		- /tests
+			- /unit                  # Services and adapter transformations
+			- /integration           # API, database, and user-ownership tests
 	- /tests
-	- /unit                          # Services and provider-adapter transformations
-	- /integration                   # API/database/user-ownership tests
-	- /acceptance                    # Primary user-journey evidence
+		- /acceptance                # Primary user-journey evidence
 	- /docs
 		- /working-docs
 			- 01-requirements-foundation.md
 			- 02-prototype-lifecycle-and-architecture.md
 		- /decisions
-			- ADR-001-first-provider.md
-			- ADR-002-demo-stack.md
-			- ADR-003-hosting-and-cost.md
 		- /prototype
-			- figma-link.md
+			- penpot-link.md
 			- prototype-export.pdf
 			- architecture.excalidraw
 		- /testing
 			- acceptance-scenarios.md
 	- /ci-cd                         # Deployment/config templates; no credentials
+	- .env.example                   # Variable names only; no real values
 	- README.md
 ```
 
-### Boundary rules
-
-- **Web** renders browser pages and receives browser actions. **API** exposes data/actions to an interactive client. A Flask prototype may use only `web/` initially; retain `api/` only when JSON endpoints are needed.
-- **Services** contain application rules. Route/API files should delegate to them rather than access the database or provider directly.
-- **Providers** define one common adapter contract and concrete implementations. Core browsing logic calls the contract, never a provider-specific SDK directly.
-- **Repositories** own database queries and persistence. They do not contain HTTP, provider, or UI logic.
-- **Models** represent concepts shared within the application, such as user, provider connection, and normalized resource metadata.
-- **Tests** mirror the risk areas: unit tests for transformations/rules, integration tests for user ownership and persistence, and acceptance tests for the assessed journey.
-
-If the team later selects React, add a `frontend/` directory at the repository root and keep the backend implementation in `app/` or rename it to `backend/`. Do not create that directory until the Assessment 2 stack decision is made.
-
 ## 7. Near future team agenda
 
-1. Review the scope-reconciliation table and explicitly approve the out-of-scope items.
-2. Nominate the first-provider owner and set a short technical-spike deadline.
-3. Create prototype screens by requirement IDs, including failure and empty states.
-4. Approve or amend the architecture-invariants table and assign owners.
-5. Decide on the shared diagram tool and create the editable first diagram.
-6. Review the proposed "monorepo" structure and create only the folders needed for the prototype baseline.
-7. Create the three decision records above before any irreversible stack investment.
-
+1. Confirm the Penpot prototype and architecture diagram exports for the 27 October milestone.
+2. Approve or amend the architecture baseline (Section 4.1) and confirm owners.
+3. Run the skills check, nominate the spike owner, and set the spike deadline. Register Google Drive test accounts at the same time.
+4. Choose the stack option (Section 4.2).
+5. Create the monorepo skeleton (Section 6) for the chosen stack, with only the folders needed to start.
