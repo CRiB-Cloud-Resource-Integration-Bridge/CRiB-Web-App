@@ -1,0 +1,228 @@
+/* Prototype v2 feedback pass
+   These rules extend the base visual system without changing the overall design direction. */
+
+.landing-screen {
+  min-height: 900px;
+}
+
+.landing-status {
+  margin-left: 4px;
+}
+
+.landing-main-v2 {
+  align-items: stretch;
+  padding-top: 48px;
+  padding-bottom: 48px;
+}
+
+.hero-lead {
+  margin-top: 24px !important;
+  color: var(--text) !important;
+  font-size: 17px !important;
+  line-height: 1.6 !important;
+}
+
+.hero-support {
+  margin-top: 14px !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+.prototype-scope,
+.future-note,
+.prototype-context {
+  display: flex;
+  gap: 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.prototype-scope {
+  margin-top: 26px;
+  padding: 15px 16px;
+  flex-direction: column;
+  background: var(--primary-soft);
+  border: 1px solid #d9d9ff;
+}
+
+.prototype-scope strong {
+  color: #3e40a5;
+}
+
+.prototype-scope span,
+.future-note,
+.prototype-context span {
+  color: var(--muted);
+}
+
+.future-note {
+  margin-top: 10px;
+  padding: 14px 16px;
+  background: #efeee9;
+  border: 1px solid var(--border);
+}
+
+.purpose-panel {
+  padding: 26px;
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  background: #ecebe6;
+}
+
+.purpose-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.purpose-panel-head h2 {
+  max-width: 430px;
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.6px;
+}
+
+.purpose-grid {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.purpose-card {
+  min-height: 176px;
+  padding: 18px;
+}
+
+.purpose-number {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.purpose-card h3 {
+  margin: 18px 0 0;
+  font-size: 16px;
+}
+
+.purpose-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.unified-preview {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: white;
+}
+
+.unified-preview-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.unified-provider-row {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #ecebe6;
+}
+
+.unified-provider-row:last-child {
+  border-bottom: 0;
+}
+
+.unified-provider-row div strong,
+.unified-provider-row div span {
+  display: block;
+}
+
+.unified-provider-row div strong {
+  font-size: 13px;
+}
+
+.unified-provider-row div span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.unified-provider-row.planned {
+  opacity: 0.64;
+}
+
+.small-provider-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 10px;
+}
+
+.topbar-search {
+  outline: none;
+}
+
+.topbar-search:focus {
+  border-color: var(--primary);
+}
+
+.field-hint {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.prototype-context {
+  padding: 15px 17px;
+  align-items: flex-start;
+  background: #f0efe9;
+  border: 1px solid var(--border);
+}
+
+.prototype-context strong {
+  min-width: 150px;
+  color: var(--text);
+}
+
+.context-first {
+  margin-bottom: 18px;
+}
+
+.btn-disabled {
+  cursor: default;
+  color: #8a8b91;
+  background: #f5f4ef;
+}
+
+.neutral-empty {
+  background: #f1f0eb !important;
+  border-color: var(--border) !important;
+  color: #666 !important;
+}
+
+@media (max-width: 1320px) {
+  .landing-main-v2 {
+    gap: 36px;
+  }
+
+  .purpose-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .purpose-card {
+    min-height: auto;
+  }
+}
