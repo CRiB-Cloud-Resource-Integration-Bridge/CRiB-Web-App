@@ -74,7 +74,8 @@ def create_app(config=None):
             ).fetchone()
         if request.method == "POST":
             supplied = request.form.get("csrf", "")
-            if not hmac.compare_digest(supplied.encode(), session.get("csrf", "-").encode()):
+            expected = session.get("csrf")
+            if not expected or not hmac.compare_digest(supplied.encode(), expected.encode()):
                 abort(400, "Invalid form token. Reload the page and try again.")
 
     @app.after_request
@@ -82,7 +83,7 @@ def create_app(config=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'none'"
         if request.endpoint != "static":
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -217,7 +218,7 @@ def create_app(config=None):
         if google_connection():
             flash("Disconnect Google Drive before switching providers.", "error")
             return redirect(url_for("providers"))
-        session.pop("google_oauth", None)
+        db().execute("DELETE FROM oauth_pending WHERE session_hash=?", (digest(session["sid"]),))
         db().execute("INSERT OR IGNORE INTO connections(user_id,provider) VALUES (?,?)", (g.user["id"], "mock"))
         db().commit()
         flash("Demo provider connected. No Google account was accessed.")
@@ -233,18 +234,26 @@ def create_app(config=None):
             return redirect(url_for("providers"))
         state = secrets.token_urlsafe(32)
         verifier = secrets.token_urlsafe(64)
-        session["google_oauth"] = {"state": state, "verifier": verifier,
-                                  "user": g.user["id"], "time": int(time.time())}
+        now = int(time.time())
+        db().execute("DELETE FROM oauth_pending WHERE expires_at<=?", (now,))
+        db().execute("INSERT INTO oauth_pending VALUES(?,?,?,?) ON CONFLICT(session_hash) DO UPDATE SET "
+                     "state_hash=excluded.state_hash, verifier=excluded.verifier, expires_at=excluded.expires_at",
+                     (digest(session["sid"]), digest(state), verifier, now+600))
+        db().commit()
         return redirect(oauth.authorization_url(state, verifier))
 
     @app.get("/oauth/google/callback")
     @protected
     def google_callback():
-        pending = session.pop("google_oauth", None)
         state = request.args.get("state", "")
-        if (oauth is None or not pending or pending["user"] != g.user["id"]
-                or int(time.time()) - pending["time"] > 600
-                or not hmac.compare_digest(state.encode(), pending["state"].encode())):
+        if oauth is None or not state:
+            abort(400, "Invalid or expired authorization request. Start again from providers.")
+        # Atomic, single-use state consumption; bound to the authenticated session.
+        pending = db().execute("DELETE FROM oauth_pending WHERE session_hash=? AND state_hash=? "
+                               "AND expires_at>? RETURNING verifier",
+                               (digest(session["sid"]), digest(state), int(time.time()))).fetchone()
+        db().commit()
+        if not pending:
             abort(400, "Invalid or expired authorization request. Start again from providers.")
         if request.args.get("error") or not request.args.get("code"):
             flash("Google authorization was cancelled or denied.", "error")
@@ -262,7 +271,7 @@ def create_app(config=None):
     @protected
     def disconnect():
         existing = google_connection()
-        session.pop("google_oauth", None)
+        db().execute("DELETE FROM oauth_pending WHERE session_hash=?", (digest(session["sid"]),))
         db().execute("DELETE FROM connections WHERE user_id=?", (g.user["id"],))
         db().execute("DELETE FROM google_connections WHERE user_id=?", (g.user["id"],))
         db().commit()

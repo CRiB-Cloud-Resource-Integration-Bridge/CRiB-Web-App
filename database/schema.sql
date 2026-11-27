@@ -19,3 +19,8 @@ CREATE TABLE IF NOT EXISTS google_connections (
  provider TEXT NOT NULL CHECK(provider='google'),
  tokens TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS oauth_pending (
+ session_hash TEXT PRIMARY KEY REFERENCES sessions(token_hash) ON DELETE CASCADE,
+ state_hash TEXT NOT NULL, verifier TEXT NOT NULL, expires_at INTEGER NOT NULL
+);

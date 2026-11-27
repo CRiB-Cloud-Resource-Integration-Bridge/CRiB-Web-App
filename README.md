@@ -59,3 +59,5 @@ For managed hosting, use the platform's required listen address and PORT. Do not
 7. Only declare live integration verified after completing these steps. Google test-mode grants may expire; reconnect if needed.
 
 References: https://developers.google.com/identity/protocols/oauth2/web-server and https://developers.google.com/workspace/drive/api/guides/api-specific-auth.
+
+OAuth state and PKCE verifier are stored server-side, bound to the current session, consumed once and expire after ten minutes. Python must use SQLite 3.35+ for the atomic callback operation (standard on the supported CI runtime).
