@@ -5,3 +5,5 @@ Provisional implementation decision for team review, not a retrospective claim o
 The original requirements permit an explicitly labeled mock-provider fallback if real OAuth cannot be demonstrated. Build and verify this baseline first. Actual Google OAuth, public HTTPS deployment, and cross-browser checks are pending. OneDrive, Dropbox, uploads, transfers, previews, NAS and synchronization remain out of scope for this recovery baseline. The 4 November discussion suggested a wider feature set; prioritization here follows the narrower requirements foundation.
 
 No claims of production readiness or completed testing. Test data only. Record actual individual contributions and AI assistance in the submission according to course rules.
+
+Update: optional Google Drive read-only adapter added with server-side encrypted token storage, state and PKCE checks, refresh and revocation. Real-provider runtime verification is still pending test credentials. Restricted scope; dedicated test accounts only. No public unrestricted OAuth launch.

@@ -45,7 +45,7 @@
     <div><p class="eyebrow">Cloud Resource Integration Bridge</p>
     <h1>Your cloud files.<br><em>One interface.</em></h1>
     <p>Connect supported storage, browse folders, search and download permitted resources from one workspace.</p>
-    <p class="muted">Assessment 2 development build. This mode uses sample storage; use test credentials only. CRiB never asks for a cloud provider password.</p>
+    <p class="muted">Assessment 2 development build. Demo storage is available; Google Drive is optional when configured. Use test credentials only. CRiB never asks for a cloud provider password.</p>
     <a class="btn primary" href="{{ url_for('dashboard' if g.user else 'signup') }}">Open your workspace</a></div>
     <div class="panel"><h2>One workspace</h2><p>01 · Connect a provider</p><p>02 · Browse and search</p><p>03 · Download permitted files</p><span class="tag">Demo storage available</span></div>
   </section>
@@ -66,24 +66,34 @@
 {% elif page=='dashboard' %}
   <p class="eyebrow">Dashboard</p><h1>Welcome, {{ g.user.name }}.</h1>
   <section class="panel"><h2>{{ 'Your workspace is ready' if connected else 'No cloud storage connected yet' }}</h2>
-  <p>{{ 'Demo storage is connected to your CRiB account. No real cloud files are accessed.' if connected else 'Connect a supported provider to start browsing files.' }}</p>
+  <p>{% if connected %}{{ 'Google Drive is connected with read-only access.' if connected.provider=='google' else 'Demo storage is connected. No real cloud files are accessed.' }}{% else %}Connect a supported provider to start browsing files.{% endif %}</p>
   <a class="btn primary" href="{{ url_for('files' if connected else 'providers') }}">{{ 'Browse files' if connected else 'Connect storage' }}</a></section>
 {% elif page=='providers' %}
   <p class="eyebrow">Connection management</p><h1>Cloud providers</h1>
   <div class="providers">
-    <section class="panel"><span class="tag">{{ 'Connected' if connected else 'Not connected' }}</span><h2>Demo storage</h2><p>Sample Google Drive-style resources. No external authentication or cloud access occurs.</p>
-    {% if connected %}
+    <section class="panel"><span class="tag">{{ 'Connected' if connected and connected.provider=='mock' else 'Not connected' }}</span><h2>Demo storage</h2><p>Sample Google Drive-style resources. No external authentication or cloud access occurs.</p>
+    {% if connected and connected.provider=='mock' %}
       <a class="btn secondary" href="{{ url_for('files') }}">Browse</a>
       <details><summary>Disconnect provider</summary><p>Confirm removal of your connection. Your CRiB account is unaffected.</p>{{ post('disconnect','Confirm disconnect','danger') }}</details>
-    {% else %}{{ post('connect','Connect demo storage') }}{% endif %}
+    {% elif not connected %}{{ post('connect','Connect demo storage') }}{% else %}<p>Disconnect your current provider first.</p>{% endif %}
     </section>
-    {% for name in ['Google Drive','OneDrive','Dropbox'] %}
+    <section class="panel"><span class="tag">{{ 'Connected' if connected and connected.provider=='google' else ('Available' if google_enabled else 'Not configured') }}</span><h2>Google Drive</h2>
+      <p>Read-only Google authorization for dedicated test accounts only. CRiB never receives your Google password.</p>
+      {% if connected and connected.provider=='google' %}
+        <a class="btn secondary" href="{{ url_for('files') }}">Browse</a>
+        {% if google_enabled %}{{ post('google_connect','Reauthorize Google Drive','secondary') }}{% endif %}
+        <details><summary>Disconnect Google Drive</summary><p>Remove access from CRiB and attempt to revoke Google authorization.</p>{{ post('disconnect','Confirm disconnect','danger') }}</details>
+      {% elif connected %}<p>Disconnect demo storage first.</p>
+      {% elif google_enabled %}{{ post('google_connect','Connect Google Drive') }}
+      {% else %}<p>OAuth credentials have not been configured.</p>{% endif %}
+    </section>
+    {% for name in ['OneDrive','Dropbox'] %}
       <section class="panel"><span class="tag">Not configured</span><h2>{{ name }}</h2><p>External integration not available in this build.</p></section>
     {% endfor %}
   </div>
 {% elif page=='files' %}
-  <p class="eyebrow">Browse files · Demo storage</p><h1>{{ 'Search results' if query else (current.name if current else 'All files') }}</h1>
-  <p class="muted">Sample data only. Search covers all demo folders.</p>
+  <p class="eyebrow">Browse files · {{ provider_label }}</p><h1>{{ 'Search results' if query else (current.name if current else 'All files') }}</h1>
+  <p class="muted">{% if provider_label=='Google Drive' %}Read-only test connection. Browse up to 500 resources per result set; search uses Google Drive name matching. Binary downloads up to 20 MB; Google-native document exports are not included.{% else %}Sample data only. Search covers all demo folders.{% endif %}</p>
   <div class="toolbar">
     <a href="{{ url_for('files') }}">Root</a>
     {% if current %}<a href="{{ url_for('files',folder=current.parent) }}">Up one folder</a>{% endif %}
@@ -104,7 +114,7 @@
   {% if item.downloadable %}<a class="btn primary" href="{{ url_for('download',file_id=item.id) }}">Download file</a>{% else %}<p role="status">Download is not permitted for this resource.</p><button disabled class="btn secondary">Download unavailable</button>{% endif %}
   <a class="btn secondary" href="{{ url_for('files',folder=item.parent) }}">Back to folder</a></section>
 {% elif page=='error' %}
-  <section class="panel"><h1>Unable to continue</h1><p role="alert">{{ error }}</p><a href="{{ url_for('dashboard' if g.user else 'landing') }}">Return to CRiB</a></section>
+  <section class="panel"><h1>Unable to continue</h1><p role="alert">{{ error }}</p>{% if provider_error and g.user %}<p><a href="{{ url_for('providers') }}">Manage connection / reauthorize</a></p>{% endif %}<a href="{{ url_for('dashboard' if g.user else 'landing') }}">Return to CRiB</a></section>
 {% endif %}
 </main>
 </div>

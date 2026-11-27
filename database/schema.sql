@@ -13,3 +13,9 @@ CREATE TABLE IF NOT EXISTS connections (
 CREATE TABLE IF NOT EXISTS login_attempts (
  email TEXT PRIMARY KEY, count INTEGER NOT NULL, until INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS google_connections (
+ user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL CHECK(provider='google'),
+ tokens TEXT NOT NULL
+);

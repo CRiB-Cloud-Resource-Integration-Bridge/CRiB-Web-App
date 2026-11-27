@@ -12,6 +12,7 @@ from flask import (Flask, abort, flash, g, redirect, render_template, request,
                    session, url_for, send_file)
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.providers.mock import MockProvider
+from services.providers.google_drive import GoogleDrive, GoogleError, OAuthConfig
 
 def create_app(config=None):
     app = Flask(__name__)
@@ -21,12 +22,18 @@ def create_app(config=None):
         SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.environ.get("CRIB_HTTPS") == "1",
         MAX_CONTENT_LENGTH=16 * 1024,
+        GOOGLE_CLIENT_ID=os.environ.get("GOOGLE_CLIENT_ID"),
+        GOOGLE_CLIENT_SECRET=os.environ.get("GOOGLE_CLIENT_SECRET"),
+        GOOGLE_REDIRECT_URI=os.environ.get("GOOGLE_REDIRECT_URI"),
+        CRIB_TOKEN_KEY=os.environ.get("CRIB_TOKEN_KEY"),
     )
     if config:
         app.config.update(config)
     if not app.secret_key:
         raise RuntimeError("Set CRIB_SECRET_KEY to a randomly generated secret.")
     Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
+    oauth = OAuthConfig.from_config(app.config)
+    app.jinja_env.globals["google_enabled"] = oauth is not None
 
     def db():
         if "db" not in g:
@@ -67,7 +74,7 @@ def create_app(config=None):
             ).fetchone()
         if request.method == "POST":
             supplied = request.form.get("csrf", "")
-            if not hmac.compare_digest(supplied, session.get("csrf", "-")):
+            if not hmac.compare_digest(supplied.encode(), session.get("csrf", "-").encode()):
                 abort(400, "Invalid form token. Reload the page and try again.")
 
     @app.after_request
@@ -88,13 +95,31 @@ def create_app(config=None):
             return fn(*args, **kwargs)
         return wrapper
 
+    def google_connection():
+        return db().execute("SELECT * FROM google_connections WHERE user_id=?", (g.user["id"],)).fetchone()
+
     def connection():
-        return db().execute("SELECT * FROM connections WHERE user_id=?", (g.user["id"],)).fetchone()
+        return google_connection() or db().execute("SELECT * FROM connections WHERE user_id=?", (g.user["id"],)).fetchone()
 
     def provider():
-        if not connection():
-            abort(403, "Connect the demo provider before accessing resources.")
+        connected = connection()
+        if not connected:
+            abort(403, "Connect a provider before accessing resources.")
+        if connected["provider"] == "google":
+            if oauth is None:
+                raise GoogleError("Google Drive is not configured. Disconnect or contact the demo administrator.")
+            user_id = g.user["id"]
+            def save_tokens(tokens):
+                # Do not recreate a connection after another request disconnects it.
+                db().execute("UPDATE google_connections SET tokens=? WHERE user_id=? AND tokens=?",
+                             (oauth.encrypt(tokens), user_id, connected["tokens"]))
+                db().commit()
+            return GoogleDrive(oauth, oauth.decrypt(connected["tokens"]), save_tokens)
         return MockProvider(g.user["id"])
+
+    def provider_label():
+        connected = connection()
+        return "Google Drive" if connected and connected["provider"] == "google" else "Demo storage"
 
     def start_session(user_id):
         old = session.get("sid")
@@ -189,16 +214,66 @@ def create_app(config=None):
     @app.post("/providers/mock/connect")
     @protected
     def connect():
+        if google_connection():
+            flash("Disconnect Google Drive before switching providers.", "error")
+            return redirect(url_for("providers"))
+        session.pop("google_oauth", None)
         db().execute("INSERT OR IGNORE INTO connections(user_id,provider) VALUES (?,?)", (g.user["id"], "mock"))
         db().commit()
         flash("Demo provider connected. No Google account was accessed.")
         return redirect(url_for("files"))
 
+    @app.post("/providers/google/connect")
+    @protected
+    def google_connect():
+        if oauth is None:
+            abort(403, "Google Drive is not configured.")
+        if connection() and connection()["provider"] == "mock":
+            flash("Disconnect demo storage before connecting Google Drive.", "error")
+            return redirect(url_for("providers"))
+        state = secrets.token_urlsafe(32)
+        verifier = secrets.token_urlsafe(64)
+        session["google_oauth"] = {"state": state, "verifier": verifier,
+                                  "user": g.user["id"], "time": int(time.time())}
+        return redirect(oauth.authorization_url(state, verifier))
+
+    @app.get("/oauth/google/callback")
+    @protected
+    def google_callback():
+        pending = session.pop("google_oauth", None)
+        state = request.args.get("state", "")
+        if (oauth is None or not pending or pending["user"] != g.user["id"]
+                or int(time.time()) - pending["time"] > 600
+                or not hmac.compare_digest(state.encode(), pending["state"].encode())):
+            abort(400, "Invalid or expired authorization request. Start again from providers.")
+        if request.args.get("error") or not request.args.get("code"):
+            flash("Google authorization was cancelled or denied.", "error")
+            return redirect(url_for("providers"))
+        tokens = oauth.exchange(request.args["code"], pending["verifier"])
+        db().execute("DELETE FROM connections WHERE user_id=?", (g.user["id"],))
+        db().execute("INSERT INTO google_connections(user_id,provider,tokens) VALUES(?,?,?) "
+                     "ON CONFLICT(user_id) DO UPDATE SET tokens=excluded.tokens",
+                     (g.user["id"], "google", oauth.encrypt(tokens)))
+        db().commit()
+        flash("Google Drive connected with read-only access.")
+        return redirect(url_for("files"))
+
     @app.post("/providers/disconnect")
     @protected
     def disconnect():
+        existing = google_connection()
+        session.pop("google_oauth", None)
         db().execute("DELETE FROM connections WHERE user_id=?", (g.user["id"],))
+        db().execute("DELETE FROM google_connections WHERE user_id=?", (g.user["id"],))
         db().commit()
+        if existing:
+            try:
+                if oauth is None:
+                    raise GoogleError("OAuth not configured.")
+                oauth.revoke(oauth.decrypt(existing["tokens"]))
+            except GoogleError:
+                flash("Disconnected locally. Google revocation could not be confirmed; remove CRiB from your Google Account connections if needed.", "error")
+                return redirect(url_for("dashboard"))
         flash("Provider disconnected.")
         return redirect(url_for("dashboard"))
 
@@ -218,7 +293,7 @@ def create_app(config=None):
             abort(404, "Folder not found.")
         rows = adapter.list(folder, query, kind)
         return render_template("app.html", page="files", rows=rows, folder=folder,
-                               current=current, query=query, kind=kind)
+                               current=current, query=query, kind=kind, provider_label=provider_label())
 
     @app.get("/files/<file_id>")
     @protected
@@ -240,7 +315,11 @@ def create_app(config=None):
         if not item["downloadable"]:
             abort(403, "This resource cannot be downloaded.")
         return send_file(adapter.download(file_id), download_name=item["name"],
-                         mimetype="text/plain", as_attachment=True)
+                         mimetype="application/octet-stream", as_attachment=True)
+
+    @app.errorhandler(GoogleError)
+    def google_error(error):
+        return render_template("app.html", page="error", error=str(error), provider_error=True), 502
 
     @app.errorhandler(400)
     @app.errorhandler(403)
