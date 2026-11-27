@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CRiB · {{ page|capitalize }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mvp.css') }}">
+</head>
+<body>
+{% macro post(endpoint, label, style='primary') -%}
+<form method="post" action="{{ url_for(endpoint) }}">
+<input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<button class="btn {{ style }}" type="submit">{{ label }}</button>
+</form>
+{%- endmacro %}
+<header>
+  <a class="brand" href="{{ url_for('landing') }}"><span>C</span> CRiB</a>
+  <nav aria-label="Account navigation">
+  {% if g.user %}
+    <a href="{{ url_for('dashboard') }}">Workspace</a>
+    {{ post('logout', 'Sign out', 'secondary') }}
+  {% else %}
+    <a href="{{ url_for('signin') }}">Sign in</a>
+    <a class="btn primary" href="{{ url_for('signup') }}">Create account</a>
+  {% endif %}
+  </nav>
+</header>
+<div class="layout {{ 'signed-in' if g.user and page != 'landing' else '' }}">
+{% if g.user and page != 'landing' %}
+<aside>
+  <nav aria-label="Workspace navigation">
+    <a href="{{ url_for('dashboard') }}" {% if page=='dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
+    <a href="{{ url_for('files') }}" {% if page in ['files','details'] %}aria-current="page"{% endif %}>Browse files</a>
+    <a href="{{ url_for('providers') }}" {% if page=='providers' %}aria-current="page"{% endif %}>Connected providers</a>
+  </nav>
+  <div class="profile"><strong>{{ g.user.name }}</strong><small>{{ g.user.email }}</small></div>
+</aside>
+{% endif %}
+<main id="main">
+{% for category,message in get_flashed_messages(with_categories=true) %}
+  <p class="notice {{ category }}" role="{{ 'alert' if category=='error' else 'status' }}">{{ message }}</p>
+{% endfor %}
+{% if page=='landing' %}
+  <section class="hero">
+    <div><p class="eyebrow">Cloud Resource Integration Bridge</p>
+    <h1>Your cloud files.<br><em>One interface.</em></h1>
+    <p>Connect supported storage, browse folders, search and download permitted resources from one workspace.</p>
+    <p class="muted">Assessment 2 development build. This mode uses sample storage; use test credentials only. CRiB never asks for a cloud provider password.</p>
+    <a class="btn primary" href="{{ url_for('dashboard' if g.user else 'signup') }}">Open your workspace</a></div>
+    <div class="panel"><h2>One workspace</h2><p>01 · Connect a provider</p><p>02 · Browse and search</p><p>03 · Download permitted files</p><span class="tag">Demo storage available</span></div>
+  </section>
+{% elif page in ['signup','signin'] %}
+  <section class="panel auth">
+  <p class="eyebrow">CRiB account</p><h1>{{ 'Create account' if page=='signup' else 'Sign in' }}</h1>
+  <p>Use a separate, test-only CRiB password. Do not enter your Google password.</p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    {% if page=='signup' %}<label for="name">Name</label><input id="name" name="name" maxlength="80" autocomplete="name" required>{% endif %}
+    <label for="email">Email</label><input id="email" name="email" type="email" maxlength="254" autocomplete="email" required>
+    <label for="password">Password</label><input id="password" name="password" type="password" maxlength="128" autocomplete="{{ 'new-password' if page=='signup' else 'current-password' }}" required {% if page=='signup' %}minlength="12"{% endif %}>
+    {% if page=='signup' %}<small>12 or more characters, including a number or symbol.</small>{% endif %}
+    <button class="btn primary" type="submit">{{ 'Create account' if page=='signup' else 'Sign in' }}</button>
+  </form>
+  <p><a href="{{ url_for('signin' if page=='signup' else 'signup') }}">{{ 'Already registered? Sign in' if page=='signup' else 'New to CRiB? Create account' }}</a></p>
+  </section>
+{% elif page=='dashboard' %}
+  <p class="eyebrow">Dashboard</p><h1>Welcome, {{ g.user.name }}.</h1>
+  <section class="panel"><h2>{{ 'Your workspace is ready' if connected else 'No cloud storage connected yet' }}</h2>
+  <p>{{ 'Demo storage is connected to your CRiB account. No real cloud files are accessed.' if connected else 'Connect a supported provider to start browsing files.' }}</p>
+  <a class="btn primary" href="{{ url_for('files' if connected else 'providers') }}">{{ 'Browse files' if connected else 'Connect storage' }}</a></section>
+{% elif page=='providers' %}
+  <p class="eyebrow">Connection management</p><h1>Cloud providers</h1>
+  <div class="providers">
+    <section class="panel"><span class="tag">{{ 'Connected' if connected else 'Not connected' }}</span><h2>Demo storage</h2><p>Sample Google Drive-style resources. No external authentication or cloud access occurs.</p>
+    {% if connected %}
+      <a class="btn secondary" href="{{ url_for('files') }}">Browse</a>
+      <details><summary>Disconnect provider</summary><p>Confirm removal of your connection. Your CRiB account is unaffected.</p>{{ post('disconnect','Confirm disconnect','danger') }}</details>
+    {% else %}{{ post('connect','Connect demo storage') }}{% endif %}
+    </section>
+    {% for name in ['Google Drive','OneDrive','Dropbox'] %}
+      <section class="panel"><span class="tag">Not configured</span><h2>{{ name }}</h2><p>External integration not available in this build.</p></section>
+    {% endfor %}
+  </div>
+{% elif page=='files' %}
+  <p class="eyebrow">Browse files · Demo storage</p><h1>{{ 'Search results' if query else (current.name if current else 'All files') }}</h1>
+  <p class="muted">Sample data only. Search covers all demo folders.</p>
+  <div class="toolbar">
+    <a href="{{ url_for('files') }}">Root</a>
+    {% if current %}<a href="{{ url_for('files',folder=current.parent) }}">Up one folder</a>{% endif %}
+    <form method="get" action="{{ url_for('files') }}" class="filters">
+      <input type="hidden" name="folder" value="{{ folder }}">
+      <label for="q">Search name</label><input id="q" name="q" type="search" value="{{ query }}" maxlength="100">
+      <label for="kind">Type</label><select id="kind" name="kind">
+        {% for val,label in [('','All types'),('folder','Folders'),('file','Files')] %}<option value="{{ val }}" {% if kind==val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select><button class="btn primary">Apply</button><a href="{{ url_for('files',folder=folder) }}">Reset</a>
+    </form>
+  </div>
+  {% if rows %}<div class="panel table-wrap"><table><thead><tr><th>Name</th><th>Type</th><th>Provider</th><th>Modified</th></tr></thead><tbody>
+  {% for item in rows %}<tr><td><a href="{{ url_for('details',file_id=item.id) }}">{{ item.name }}</a></td><td>{{ item.kind|capitalize }}</td><td>{{ item.provider }}</td><td>{{ item.modified }}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<section class="panel"><h2>No results</h2><p>Try a different search or filter.</p><a href="{{ url_for('files',folder=folder) }}">Clear filters</a></section>{% endif %}
+{% elif page=='details' %}
+  <p class="eyebrow">Resource details</p><h1>{{ item.name }}</h1>
+  <section class="panel"><dl><dt>Provider</dt><dd>{{ item.provider }}</dd><dt>Type</dt><dd>{{ item.kind }}</dd><dt>Modified</dt><dd>{{ item.modified }}</dd><dt>Size</dt><dd>{{ item.size if item.size is not none else 'Unavailable' }}{% if item.size is not none %} bytes{% endif %}</dd></dl>
+  {% if item.downloadable %}<a class="btn primary" href="{{ url_for('download',file_id=item.id) }}">Download file</a>{% else %}<p role="status">Download is not permitted for this resource.</p><button disabled class="btn secondary">Download unavailable</button>{% endif %}
+  <a class="btn secondary" href="{{ url_for('files',folder=item.parent) }}">Back to folder</a></section>
+{% elif page=='error' %}
+  <section class="panel"><h1>Unable to continue</h1><p role="alert">{{ error }}</p><a href="{{ url_for('dashboard' if g.user else 'landing') }}">Return to CRiB</a></section>
+{% endif %}
+</main>
+</div>
+<footer>CRiB · COMP-2002 · Assessment 2 development build · Use test data only</footer>
+</body>
+</html>

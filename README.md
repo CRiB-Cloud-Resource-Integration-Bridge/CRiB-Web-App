@@ -1,21 +1,49 @@
 # CRiB Web App
 
-This repository currently contains the CRiB Assessment 1 prototype together with the existing project scaffold for the later web application.
+Cloud Resource Integration Bridge — COMP-2002 Web Development.
 
-## Current prototype
+## Assessment 2 development branch
 
-The interface was first designed in Penpot. The version in [`prototype/`](prototype/) is the interactive HTML/CSS/JavaScript recreation of that design, built so the user flow can be tested directly in a browser.
+The existing Penpot-derived interactive prototype remains in `prototype/` and is published separately at https://crib-cloud-resource-integration-bridge.github.io/CRiB-Web-App/. It uses simulated interactions.
 
-It currently uses sample data and a simulated Google Drive connection. No real provider login, OAuth flow, or cloud API is connected yet.
+This branch adds a Python/Flask application using SQLite, server-rendered HTML and responsive CSS. It implements real CRiB accounts, server-side sessions, a user-scoped demo provider, folder navigation, search/filter, file details, actual sample-file downloads and disconnect. **The demo provider is not Google Drive.** No real cloud account is accessed. Use only synthetic credentials and sample data.
 
-**Live prototype:** https://crib-cloud-resource-integration-bridge.github.io/CRiB-Web-App/
+### Local setup (Python 3.11+)
 
-For now, the prototype is hosted with GitHub Pages for review and testing. The hosting platform for the later working application will be discussed and chosen by the team.
+Windows PowerShell:
 
-## Repository notes
+    py -m venv .venv
+    .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+    $env:CRIB_SECRET_KEY = (.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_hex(32))")
+    .\.venv\Scripts\python.exe app.py
 
-- `prototype/` — current interactive prototype
-- `docs/` — project documentation and working documents
-- the existing application scaffold in the repository root is being kept for later implementation
+Linux/macOS:
 
-To preview the prototype locally, open `prototype/index.html` in a browser.
+    python3 -m venv .venv
+    .venv/bin/python -m pip install -r requirements.txt
+    export CRIB_SECRET_KEY="$(.venv/bin/python -c 'import secrets; print(secrets.token_hex(32))')"
+    .venv/bin/python app.py
+
+Open http://127.0.0.1:8000. Create a test account and connect Demo storage. Save the secret securely between restarts; never commit it.
+
+### Tests
+
+    python -m unittest discover -s tests -v
+
+### Deployment
+
+GitHub Pages hosts only the original static prototype, not Flask. For a live demo use a Python web host or a dedicated server running Waitress behind an HTTPS reverse proxy. Set a strong persistent CRIB_SECRET_KEY, CRIB_HTTPS=1 and CRIB_DATABASE to a persistent writable file outside the repository. Start with:
+
+    waitress-serve --listen=127.0.0.1:8000 --call app:create_app
+
+For managed hosting, use the platform's required listen address and PORT. Do not expose the Flask development server to the internet. Real-provider authorization, public deployment, browser testing, and final team review remain separate tasks.
+
+### Structure
+
+- app.py: routes, validation, authentication and session management
+- database/schema.sql: relational schema
+- services/providers/mock.py: provider adapter
+- templates/app.html and static/css/mvp.css: working interface
+- tests/test_app.py: integration checks
+- prototype/: preserved Assessment 1 demonstration
+- docs/working-docs/: original requirements and architecture
