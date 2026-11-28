@@ -1,9 +1,9 @@
 name: MVP tests
 on:
   push:
-    branches: [assessment-2-mvp, main]
+    branches: [development, main]
   pull_request:
-    branches: [main]
+    branches: [development, main]
 permissions:
   contents: read
 jobs:
